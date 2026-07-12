@@ -142,10 +142,9 @@
     }
   },
   "zh": {
-    "name": "zh-HK",
+    "name": "zh-CN",
     "voices": {
       "male": [
-        "zh-HK-WanLungNeural",
         "zh-CN-YunjianNeural",
         "zh-CN-YunxiNeural",
         "zh-CN-YunxiaNeural",
@@ -153,8 +152,6 @@
         "zh-TW-YunJheNeural"
       ],
       "female": [
-        "zh-HK-HiuGaaiNeural",
-        "zh-HK-HiuMaanNeural",
         "zh-CN-XiaoxiaoNeural",
         "zh-CN-XiaoyiNeural",
         "zh-CN-liaoning-XiaobeiNeural",
