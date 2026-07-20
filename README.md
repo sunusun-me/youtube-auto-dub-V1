@@ -35,6 +35,8 @@ pip install -r requirements.txt
 
 ## 用法
 
+仓库自带一键入口 `./py`（clone 后即可用）：
+
 ```bash
 # 一键：中文配音 + 中文字幕（源语自动识别）
 ./py "https://www.youtube.com/watch?v=<VIDEO_ID>"
@@ -46,6 +48,9 @@ pip install -r requirements.txt
 # 换配音音色（男声）
 VOICE=zh-CN-YunjianNeural ./py "<URL>"
 ```
+
+> 可选：若想在任意目录用全局命令 `py` / `dub` / `python <URL>` 拉起配音，可自行在 shell 配置里加别名指向本目录的 `py`。仓库本身只依赖 `./py`，不强制此设置。
+
 
 也可直接调用 `main.py` 自定义参数：
 
