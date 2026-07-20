@@ -1,126 +1,127 @@
 # youtube-auto-dub (V1)
 
-自动为 YouTube 视频生成**双语字幕 + 中文配音**的本地流水线（macOS / Apple Silicon）。
+> English | [中文](README.zh.md)
 
-给一个 YouTube 链接，本地完成：下载 → 语音识别 → 翻译 → 语音合成 → 混音 → 出片。全程走免费 / 本地方案，无需付费 API。
+A local pipeline that automatically generates **bilingual subtitles + Chinese dubbing** for YouTube videos (macOS / Apple Silicon).
 
-## 特性
+Give it a YouTube link, and it runs everything locally: download → speech recognition → translation → speech synthesis → mixing → final render. Fully free / local — no paid APIs required.
 
-- **一键出片**：`py <URL>` 端到端，无需手动分步。
-- **双语**：保留原声轨 + 叠加中文配音，附字幕。
-- **本地识别**：Whisper（faster-whisper）本地转写，支持 Apple Silicon。
-- **免费翻译**：Google 非官方 RPC 翻译信道，多并发 + 指数退避防限流。
-- **神经语音合成**：Edge-TTS 微软音色，失败自动回退 macOS 本地 `say`。
-- **稳定混音**：pydub 内存级音频叠加 + FFmpeg 硬件加速渲染（`h264_videotoolbox`）。
+## Features
 
-## 环境要求
+- **One command**: `py <URL>` end-to-end, no manual steps.
+- **Bilingual**: keeps the original audio track and overlays Chinese dubbing, with subtitles.
+- **Local recognition**: Whisper (faster-whisper) transcription, Apple Silicon supported.
+- **Free translation**: Google's unofficial RPC translation channel, concurrent + exponential backoff to avoid rate limits.
+- **Neural TTS**: Edge-TTS Microsoft voices, with automatic fallback to the macOS local `say`.
+- **Stable mixing**: in-memory audio overlay via pydub + hardware-accelerated render with FFmpeg (`h264_videotoolbox`).
 
-- macOS（Apple Silicon 推荐）
-- Python 3.10+（已在 3.12 验证；3.9 及以下可能因 `onnxruntime` / `faster-whisper` 失败）
-- FFmpeg（`brew install ffmpeg`）
+## Requirements
 
-## 安装
+- macOS (Apple Silicon recommended)
+- Python 3.10+ (verified on 3.12; 3.9 and below may fail due to `onnxruntime` / `faster-whisper`)
+- FFmpeg (`brew install ffmpeg`)
+
+## Installation
 
 ```bash
 git clone https://github.com/sunusun-me/youtube-auto-dub-V1.git
 cd youtube-auto-dub-V1
 
-# 建虚拟环境并装依赖
+# Create a virtual environment and install dependencies
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-> Apple Silicon 用户：`requirements.txt` 里的 `torch` 走 CPU 源即可（自动启用 Metal 加速），无需 CUDA 版。
+> Apple Silicon users: the `torch` in `requirements.txt` uses the CPU build (Metal acceleration is enabled automatically); no CUDA build needed.
 
-## 用法
+## Usage
 
-仓库自带一键入口 `./py`（clone 后即可用）：
+The repo ships a one-shot entry point `./py` (works right after clone):
 
 ```bash
-# 一键：中文配音 + 中文字幕（源语自动识别）
+# One command: Chinese dubbing + Chinese subtitles (source language auto-detected)
 ./py "https://www.youtube.com/watch?v=<VIDEO_ID>"
 
-# 变体
-./py "<URL>" en            # 英文字幕 + 保留原声（源为 en 时跳过配音）
-./py "<URL>" cn medium     # 第三参数指定 Whisper 模型 (tiny/base/small/medium, 默认 small)
+# Variants
+./py "<URL>" en            # English subtitles + keep original audio (skips dubbing if source is en)
+./py "<URL>" cn medium     # 3rd arg picks the Whisper model (tiny/base/small/medium, default small)
 
-# 换配音音色（男声）
+# Change the dubbing voice (male)
 VOICE=zh-CN-YunjianNeural ./py "<URL>"
 ```
 
-> 可选：若想在任意目录用全局命令 `py` / `dub` / `python <URL>` 拉起配音，可自行在 shell 配置里加别名指向本目录的 `py`。仓库本身只依赖 `./py`，不强制此设置。
+> Optional: if you want to invoke dubbing from any directory via global commands `py` / `dub` / `python <URL>`, add a shell alias pointing to this directory's `py` yourself. The repo only depends on `./py` and does not require this setup.
 
-
-也可直接调用 `main.py` 自定义参数：
+You can also call `main.py` directly for custom parameters:
 
 ```bash
 python main.py "<URL>" --mode both --lang_dub zh-CN --voice yunjian
 ```
 
-常用参数：
+Common options:
 
-| 参数 | 缩写 | 说明 |
-|------|------|------|
-| `url` | | YouTube 视频链接（必填） |
-| `--mode` | `-m` | `sub`（仅字幕）/ `dub`（仅配音）/ `both`（字幕+配音） |
-| `--lang` | `-l` | 目标语言（同时应用于字幕与配音） |
-| `--lang_sub` | `-ls` | 覆盖字幕语言（如英文字幕 + 中文配音） |
-| `--lang_dub` | `-ld` | 覆盖配音语言 |
-| `--whisper_model` | `-wm` | Whisper 模型：`tiny` / `base` / `small` / `medium` |
-| `--voice` | `-v` | 音色，支持别名 `yunjian`（沉稳男声）/ `xiaoxiao`（情感女声）/ `yunxi`（活泼男声），或完整名如 `zh-CN-XiaoxiaoNeural`，或系统本地音色 `Tingting` |
-| `--browser` | `-b` | 从浏览器提取 Cookie：`chrome` / `edge` / `firefox` |
+| Option | Short | Description |
+|--------|-------|-------------|
+| `url` | | YouTube video link (required) |
+| `--mode` | `-m` | `sub` (subtitles only) / `dub` (dubbing only) / `both` (subtitles + dubbing) |
+| `--lang` | `-l` | Target language (applied to both subtitles and dubbing) |
+| `--lang_sub` | `-ls` | Override subtitle language (e.g. English subtitles + Chinese dubbing) |
+| `--lang_dub` | `-ld` | Override dubbing language |
+| `--whisper_model` | `-wm` | Whisper model: `tiny` / `base` / `small` / `medium` |
+| `--voice` | `-v` | Voice; accepts aliases `yunjian` (calm male) / `xiaoxiao` (expressive female) / `yunxi` (lively male), full names like `zh-CN-XiaoxiaoNeural`, or system local voices such as `Tingting` |
+| `--browser` | `-b` | Extract cookies from a browser: `chrome` / `edge` / `firefox` |
 
-## 架构简介
+## How It Works
 
-**工作流**：
+**Pipeline**:
 
 ```
-YouTube URL → 下载 → Whisper 识别 → 语义切片 → 翻译 → Edge-TTS 合成 → pydub 混音 → FFmpeg 渲染
+YouTube URL → Download → Whisper ASR → Segmentation → Translation → Edge-TTS → pydub Mixing → FFmpeg Render
 ```
 
-1. **下载**（`src/youtube.py`）：yt-dlp 提取视频流与音频。
-2. **识别**（`main.py`）：Whisper 本地转写，得到带时间戳的文本。
-3. **切片**（`src/media.py`）：按静音间歇切分为自然语句（最大 ~10 秒）。
-4. **翻译**（`src/googlev4.py`）：Google RPC 信道并发翻译 + 指数退避。
-5. **合成**（`src/tts.py`）：Edge-TTS 音色映射，失败回退本地 `say`。
-6. **混音**（`src/media.py`）：pydub 内存级叠加原声与配音。
-7. **渲染**（`main.py`）：FFmpeg 硬件加速封装音轨 + 字幕。
+1. **Download** (`src/youtube.py`): yt-dlp extracts the video stream and audio.
+2. **Recognition** (`main.py`): Whisper transcribes locally, producing timestamped text.
+3. **Segmentation** (`src/media.py`): splits text into natural sentences by silence gaps (max ~10s).
+4. **Translation** (`src/googlev4.py`): concurrent translation over the Google RPC channel + exponential backoff.
+5. **Synthesis** (`src/tts.py`): Edge-TTS voice mapping, falling back to local `say` on failure.
+6. **Mixing** (`src/media.py`): in-memory overlay of original audio and dubbing via pydub.
+7. **Render** (`main.py`): FFmpeg hardware-accelerated muxing of audio track + subtitles.
 
-**目录结构**：
+**Project layout**:
 
 ```
 youtube-auto-dub-V1/
-├── py                  # 一键配音入口
-├── main.py             # CLI 解析与流水线编排
-├── requirements.txt    # 依赖快照
-├── language_map.json   # 语言 → 默认音色映射
+├── py                  # one-shot dubbing entry point
+├── main.py             # CLI parsing and pipeline orchestration
+├── requirements.txt    # dependency snapshot
+├── language_map.json   # language → default voice mapping
 └── src/
-    ├── models.py       # 核心数据结构
-    ├── youtube.py      # yt-dlp 下载封装
-    ├── media.py        # 切片 / 混音 / 渲染
-    ├── googlev4.py     # Google RPC 翻译信道
-    ├── tts.py          # Edge-TTS 合成 + 本地回退
-    └── ui.py           # Rich 终端渲染
+    ├── models.py       # core data structures
+    ├── youtube.py      # yt-dlp download wrapper
+    ├── media.py        # segmentation / mixing / rendering
+    ├── googlev4.py     # Google RPC translation channel
+    ├── tts.py          # Edge-TTS synthesis + local fallback
+    └── ui.py           # Rich terminal rendering
 ```
 
-运行产物：`output/`（成品视频）、`.cache/`（下载缓存）、`temp/`（临时切片，单次运行后自动清空）。缓存可随时 `rm -rf .cache/*` 释放。
+Runtime outputs: `output/` (final videos), `.cache/` (download cache), `temp/` (temporary segments, auto-cleared after each run). The cache can be freed anytime with `rm -rf .cache/*`.
 
-## 安全须知
+## Security Notice
 
-> 本工具仅供**个人学习与技术研究**。请遵守所在地区版权法规与 YouTube / Google / Microsoft 服务条款。因不当使用（批量下载、再分发受版权保护内容、绕过平台限制）导致的账号封禁或法律纠纷，由使用者自负。
+> This tool is for **personal learning and technical research only**. Comply with the copyright laws of your region and the terms of service of YouTube / Google / Microsoft. The user bears sole responsibility for any account bans or legal disputes caused by misuse (bulk downloading, redistributing copyrighted content, circumventing platform restrictions).
 
-**Cookie 与凭据**
+**Cookies & credentials**
 
-- `cookies.txt` / `.venv/` 已被 `.gitignore` 忽略，**绝不入库**。
-- `cookies.txt` 仅用于本地 yt-dlp 绕过登录 / 年龄限制，须自行从浏览器导出，切勿上传至任何公开仓库或聊天工具。
-- 若凭据文件意外被提交，请**立即作废相关会话**（改密码 / 注销设备）——泄露的令牌在删除文件后仍可从旧 commit 访问。
-- 切勿将 GitHub PAT、登录 Cookie、`.env` 放入本仓库。
+- `cookies.txt` / `.venv/` are ignored by `.gitignore` and **never committed**.
+- `cookies.txt` is only used locally by yt-dlp to bypass login / age restrictions; export it from your own browser and never upload it to any public repo or chat tool.
+- If a credential file is accidentally committed, **revoke the affected session immediately** (change password / sign out of devices) — leaked tokens remain accessible from old commits even after the file is deleted.
+- Never put GitHub PATs, login cookies, or `.env` files into this repo.
 
-**第三方接口风险**
+**Third-party API risks**
 
-- 翻译默认 Google 非官方 RPC、TTS 默认 Edge-TTS，均为非公开调用方式，随时可能被限流 / 改版。正式 / 长期用途建议改用官方 API（Google Cloud Translation / Azure TTS）或本地开源方案，并做好失败降级。
+- Translation defaults to Google's unofficial RPC and TTS defaults to Edge-TTS, both unofficial calls that may be rate-limited or changed at any time. For production / long-term use, switch to official APIs (Google Cloud Translation / Azure TTS) or local open-source alternatives, with proper fallback handling.
 
-## 许可
+## License
 
-基于 [@mangodxd](https://github.com/mangodxd) 的开源项目，由 **nusun** 针对 Apple Silicon (M4) 重构优化。本衍生版本遵循 **MIT** 协议，见 [LICENSE](LICENSE)。
+Based on the open-source project by [@mangodxd](https://github.com/mangodxd), refactored and optimized for Apple Silicon (M4) by **nusun**. This derivative is released under the **MIT** License; see [LICENSE](LICENSE).
