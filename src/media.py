@@ -85,19 +85,22 @@ def mix_dubbing(og_audio: Path, segments: List[SubtitleSegment], output_path: Pa
             final_mix.export(str(output_path), format="wav")
             return
 
-        # 3. 内存物理拓扑：按时间戳物理重叠（Overlay）每个音频切片
+        # 3. cursor 顺序接龙防重叠: TTS 时长超过字幕区间时, 后句从前句结束处顺延,
+        #    绝不按 start 硬叠加(那会产生双人声重叠)
         success_count = 0
+        cursor_ms = 0
         for seg in valid_clips:
             try:
                 tts_segment = AudioSegment.from_file(str(seg.tts_audio_path))
                 # 强制将 TTS 切片提升至相同的音频规格
                 tts_segment = tts_segment.set_frame_rate(44100).set_channels(2)
                 
-                # 计算毫秒级时间轴位置
-                start_ms = max(0, int(seg.start * 1000))
+                # 落点 = max(字幕起点, 前一句实际结束点)
+                start_ms = max(0, int(seg.start * 1000), cursor_ms)
                 
                 # 物理重叠融入主音轨中
                 final_mix = final_mix.overlay(tts_segment, position=start_ms)
+                cursor_ms = start_ms + len(tts_segment)
                 success_count += 1
             except Exception:
                 continue
@@ -115,42 +118,3 @@ def mix_dubbing(og_audio: Path, segments: List[SubtitleSegment], output_path: Pa
         if og_audio.exists():
             import shutil
             shutil.copy(str(og_audio), str(output_path))
-
-
-def render_video(video_path: Path, subtitle_path: Path | None, dub_audio_path: Path | None, output_path: Path):
-    """
-    原生高性能渲染引擎 - 强力击穿一切多音轨冲突
-    """
-    console.step("Rendering video...")
-    
-    # 建立底层命令，分离音视频逻辑
-    cmd = ['ffmpeg', '-y', '-i', str(video_path)]
-    
-    has_dub = dub_audio_path and dub_audio_path.exists() and dub_audio_path.stat().st_size > 0
-    if has_dub:
-        cmd.extend(['-i', str(dub_audio_path)])
-        
-    if subtitle_path and subtitle_path.exists():
-        # 安全处理 macOS 下 FFmpeg subtitles 滤镜的路径转义灾难
-        sub_path_str = str(subtitle_path.resolve()).replace("\\", "/").replace(":", "\\:")
-        cmd.extend(['-vf', f"subtitles='{sub_path_str}'"])
-        
-    # 精准物理映射流：彻底切断原视频自带的干扰音轨
-    cmd.extend(['-map', '0:v:0']) # 锁定原视频画面
-    
-    if has_dub:
-        cmd.extend(['-map', '1:a:0']) # 锁定新合成的配音音轨
-        # 使用现代播放器通用的高规格双声道 AAC 重编码，确保 Mac/iPhone 绝对不会静音
-        cmd.extend(['-c:v', 'libx264', '-c:a', 'aac', '-b:a', '256k', '-ar', '44100', '-ac', '2'])
-    else:
-        cmd.extend(['-map', '0:a:0?']) # 如果没配音，尝试保留原视频声音
-        cmd.extend(['-c:v', 'libx264', '-c:a', 'copy'])
-        
-    cmd.append(str(output_path))
-    
-    # 捕获渲染日志，拒绝一切暗坑
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        raise Exception(f"FFmpeg Video Render Failed!\nSTDERR: {result.stderr}")
-    
-    console.success("Video rendered successfully")

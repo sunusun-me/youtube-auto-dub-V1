@@ -75,7 +75,9 @@ def run_ffmpeg_mux(video_path, audio_path, srt_path, output_path, hard_sub=False
         cmd.extend(['-c:v', 'copy', '-c:a', 'aac', '-ar', '44100', '-ac', '2'])
         cmd.append(str(output_path))
         
-        subprocess.run(cmd, capture_output=True, text=True, check=True)
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"FFmpeg mux 失败 (soft):\n{result.stderr[-2000:]}")
         return
 
     # 严格处理 macOS 下 FFmpeg subtitles 滤镜的绝对路径转义
@@ -98,7 +100,9 @@ def run_ffmpeg_mux(video_path, audio_path, srt_path, output_path, hard_sub=False
     ]
     
     cmd.append(str(output_path))
-    subprocess.run(cmd, capture_output=True, text=True, check=True)
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"FFmpeg mux 失败 (hard-sub):\n{result.stderr[-2000:]}")
 
 
 async def run_pipeline(args):
@@ -156,7 +160,8 @@ async def run_pipeline(args):
         
         console.info("Connecting to translation engine")
         translator = GoogleTranslator()
-        
+        sub_texts = None
+
         # 字幕翻译管线
         if args.mode in ["sub", "both"]:
             console.step(f"Translating {len(texts)} subtitle segments -> {final_lang_sub.upper()}")
@@ -167,7 +172,7 @@ async def run_pipeline(args):
 
         # 配音播音稿翻译管线
         if args.mode in ["dub", "both"]:
-            if args.mode == "both" and final_lang_dub == final_lang_sub:
+            if sub_texts is not None and final_lang_dub == final_lang_sub:
                 dub_texts = sub_texts
             else:
                 console.step(f"Translating {len(texts)} dubbing scripts -> {final_lang_dub.upper()}")
@@ -183,7 +188,11 @@ async def run_pipeline(args):
         # TTS 合成管线
         project.dub_audio_path = None
         if args.mode in ["dub", "both"]:
-            voice = args.voice  
+            # gender 参数接入音色选择: 用户显式给 --voice 时以 voice 为准
+            if args.voice:
+                voice = args.voice
+            else:
+                voice = "zh-CN-YunjianNeural" if args.gender == "male" else "zh-CN-XiaoxiaoNeural"
             console.info(f"Generating text-to-speech ({voice})")
             
             sem = asyncio.Semaphore(20)
@@ -250,7 +259,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="YouTube Auto Sub/Dub Studio")
     parser.add_argument("url", help="YouTube video URL")
     
-    parser.add_argument("--lang", "-l", help="General target language (Default: vi)")
+    parser.add_argument("--lang", "-l", help="General target language (Default: en)")
     parser.add_argument("--lang_sub", "-ls", help="Subtitle language (Overrides --lang)")
     parser.add_argument("--lang_dub", "-ld", help="Dubbing language (Overrides --lang)")
     
@@ -261,8 +270,9 @@ if __name__ == "__main__":
     parser.add_argument("--whisper_model", "-wm", help="Whisper model (tiny, base, small, medium)")
     
     parser.add_argument("--hard_sub", action="store_true", help="Burn subtitles permanently into video pixels")
-    parser.add_argument('--voice', type=str, default='zh-CN-XiaoxiaoNeural', 
-                    help='指定配音角色。例如：zh-CN-XiaoxiaoNeural (女), zh-CN-YunjianNeural (男)')
+    parser.add_argument("--debug", action="store_true", help="出错时打印完整 traceback")
+    parser.add_argument('--voice', type=str, default=None,
+                    help='指定配音角色(覆盖 --gender)。例如：zh-CN-XiaoxiaoNeural (女), zh-CN-YunjianNeural (男)')
     
     args = parser.parse_args()
 
@@ -274,4 +284,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         pass
     except Exception as e:
+        if args.debug:
+            import traceback
+            traceback.print_exc()
         console.print(f"\n[red]System Error: {e}[/red]")

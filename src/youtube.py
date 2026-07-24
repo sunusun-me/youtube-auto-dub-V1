@@ -1,5 +1,6 @@
 import subprocess
 import yt_dlp
+from pathlib import Path
 from typing import Optional
 from .models import ProjectContext, CACHE_DIR
 from .ui import console
@@ -17,8 +18,13 @@ def download_project(url: str, browser: Optional[str] = None) -> ProjectContext:
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)
         video_id = info['id']
-        video_path = CACHE_DIR / f"{video_id}.mp4"
+        # 以 yt-dlp 真实产物路径为准, 不假设一定是 .mp4 (format 兜底链可能出 webm/mkv)
+        real_file = Path(ydl.prepare_filename(info))
+        video_path = real_file if real_file.exists() else CACHE_DIR / f"{video_id}.mp4"
         audio_path = CACHE_DIR / f"{video_id}.wav"
+
+    if not video_path.exists():
+        raise FileNotFoundError(f"下载产物不存在: {video_path} (yt-dlp 实际输出格式与预期不符)")
 
     if not audio_path.exists() or audio_path.stat().st_size < 1024 * 100:
         console.step("Extracting audio format...")

@@ -20,7 +20,8 @@ VOICE_MATRIX = {
 
 async def generate_single_tts(text: str, voice_name: str, output_path: Path):
     """
-    原子级 TTS 生成核心：支持微软云端高级音色，自动退化至 macOS 本地 Tingting 引擎
+    原子级 TTS 生成核心：微软 Edge-TTS 优先, 失败退化 macOS say(Tingting),
+    全部失败时生成 0.1s 静音兜底文件并显性告警(坏片静音优于无声消失/英文假片)
     """
     if not text.strip():
         return False
@@ -36,7 +37,7 @@ async def generate_single_tts(text: str, voice_name: str, output_path: Path):
             return True
         except Exception as e:
             console.warning(f"Edge-TTS [{target_voice}] 失败: {e}。自动切回 macOS 本地兜底。")
-            # 失败后不要报错，无缝向下进入方案 B
+            # 注意: say 对长纯中文句语言检测不可靠(可能念成英文), 仅作降级手段
             target_voice = "Tingting"
 
     # 方案 B：使用 macOS 系统原生的 say 命令行引擎（包括 Tingting）
@@ -57,31 +58,16 @@ async def generate_single_tts(text: str, voice_name: str, output_path: Path):
             
             if temp_aiff.exists():
                 os.remove(temp_aiff)
-            return True
+            if output_path.exists() and output_path.stat().st_size > 0:
+                return True
     except Exception as e:
         console.error(f"本地 TTS 引擎完全崩溃: {e}")
-        
+
+    # 终极兜底: 生成静音片, 保证该段在时间轴上留痕且不污染混音(并显性告警)
+    console.warning(f"[TTS 失败] 段落全链失败, 已用静音兜底: {text[:30]!r}...")
+    proc = await asyncio.create_subprocess_exec(
+        'ffmpeg', '-y', '-f', 'lavfi', '-i', 'anullsrc=r=24000:cl=mono',
+        '-t', '0.1', str(output_path),
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    await proc.communicate()
     return False
-
-async def generate_batch_tts(segments, voice: str):
-    """
-    批量调度引擎：将主程序传入的 voice 变量精准分发
-    """
-    console.step(f"Generating text-to-speech ({voice})")
-    
-    # 这里设置 5 并发，既快又不会被微软封锁
-    sem = asyncio.Semaphore(5)
-    
-    async def worker(seg):
-        async with sem:
-            # 确保你的段落模型里有存放音频路径的属性
-            tts_path = Path(f"temp/tts_{seg.start}.mp3")
-            seg.tts_audio_path = tts_path
-            
-            # 使用翻译好的配音文本，没有则用原文
-            txt = seg.translated_text_sub if getattr(seg, 'translated_text_sub', None) else seg.source_text
-            await generate_single_tts(txt, voice, tts_path)
-
-    tasks = [worker(seg) for seg in segments]
-    await asyncio.gather(*tasks)
-    console.success("TTS Generation complete")

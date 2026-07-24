@@ -11,6 +11,7 @@ class GoogleTranslator:
     def __init__(self):
         # 提高超时阈值，防止长句翻译时网络波动导致配音音轨直接断裂
         self.client = httpx.AsyncClient(timeout=20)
+        self.fallback_count = 0  # 记录翻译失败回退原文的段数(隐蔽错误显性化)
         self.base_url_rpc = "https://translate.google.com/_/TranslateWebserverUi/data/batchexecute"
         self.base_url_scrape = "https://translate.google.com/m"
         
@@ -125,9 +126,11 @@ class GoogleTranslator:
                         await asyncio.sleep(sleep_time)
                         continue
                     else:
-                        pass
-        
-        # 绝不返回空字符串！降级返回原文，保障混音流水线不会产出静音空白轨
+                        last_error = e
+
+        # 降级返回原文保障流水线不断, 但必须显性告警(禁止静默污染下游)
+        self.fallback_count += 1
+        console.warning(f"[翻译回退] 第 {self.fallback_count} 段翻译失败, 回退原文: {text[:40]!r}...")
         return text
 
     async def translate_batch(self, texts: List[str], target: str) -> List[str]:
@@ -169,7 +172,10 @@ class GoogleTranslator:
         # 严格按照原数组的索引进行完美物理对齐（绝无对齐失败可能）
         sorted_results = sorted(indexed_results, key=lambda x: x[0])
         final_results = [res[1] for res in sorted_results]
-        
+
+        if self.fallback_count:
+            console.warning(f"[WARN] 本批共 {self.fallback_count}/{total_count} 段翻译失败回退原文, 产物可能混入源语言!")
+
         return final_results
 
     async def close(self):
