@@ -130,11 +130,14 @@ async def run_pipeline(args):
         console.info("Downloading media")
         if os.path.exists(args.url):
             console.info("Detected local file, skipping download.")
-            from src.models import Project
-            project = Project()
-            project.video_path = args.url
-            project.audio_path = args.url  # 假设音频路径即文件本身
-            project.video_id = "local_cache"
+            from pathlib import Path as _Path
+            from src.models import ProjectContext
+            local_path = _Path(args.url)
+            project = ProjectContext(
+                video_id="local_cache",
+                video_path=local_path,
+                audio_path=local_path,  # faster-whisper 可直接解封装取音频
+            )
         else:
             project = download_project(args.url, args.browser)
 
