@@ -45,7 +45,8 @@ def get_safe_video_title(url, default_id="fallback_audio_output") -> str:
             return clean_title
             
     except Exception as e:
-        # 如果获取标题失败，直接返回安全的 video_id
+        # 获取标题失败降级返回 video_id, 但显性告警(不静默)
+        console.warning(f"[标题获取失败] {type(e).__name__}: {e}. 文件名降级用 video_id={video_id}")
         return video_id
 
 
@@ -80,8 +81,9 @@ def run_ffmpeg_mux(video_path, audio_path, srt_path, output_path, hard_sub=False
             raise RuntimeError(f"FFmpeg mux 失败 (soft):\n{result.stderr[-2000:]}")
         return
 
-    # 严格处理 macOS 下 FFmpeg subtitles 滤镜的绝对路径转义
-    safe_srt_path = str(srt_path).replace(":", "\\:").replace("\\", "/")
+    # FFmpeg subtitles 滤镜路径转义: 必须先归一化反斜杠, 再转义冒号
+    # (顺序反了会把刚插入的转义反斜杠 \: 又替换成 /:, 破坏转义)
+    safe_srt_path = str(srt_path).replace("\\", "/").replace(":", "\\:")
     actual_audio = audio_path if (audio_path and os.path.exists(audio_path) and os.path.getsize(audio_path) > 0) else video_path
     
     cmd = [
